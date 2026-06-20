@@ -1,0 +1,10 @@
+{
+    "name": "intel-grabber",
+    "version": "1.0.0",
+    "scripts": {
+        "build": "echo 'Build done'"
+    },
+    "dependencies": {
+        "nodemailer": "^6.9.7"
+    }
+}
